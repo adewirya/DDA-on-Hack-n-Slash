@@ -1,13 +1,17 @@
 ﻿using UnityEngine;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 
-public class DDAScript : MonoBehaviour
+public class Runner : MonoBehaviour
 {
     Process pythonProcess;
     double positiveMult = 1;
     double negativeMult = 1;
     int heartRate = -1;
+    private int oldValue = 0;
+    private int newValue = 0;
+    private bool increaseInHeartRate = false;
     void Start()
     {
         StartPythonScript();
@@ -37,12 +41,31 @@ public class DDAScript : MonoBehaviour
         pythonProcess.BeginOutputReadLine();
     }
 
-    void HeartRate_OutputDataReceived(object sender, DataReceivedEventArgs e){
-         if (!string.IsNullOrEmpty(e.Data))
+    void HeartRate_OutputDataReceived(object sender, DataReceivedEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(e.Data))
         {
             heartRate = int.Parse(e.Data);
+            while (true)
+            {
+                newValue = int.Parse(e.Data);
+
+                if (oldValue != newValue)
+                {
+                    if (Mathf.Abs(newValue - oldValue) > 5)
+                    {
+                        increaseInHeartRate = true;
+                    }
+                    oldValue = newValue;
+                }
+                else
+                {
+                    increaseInHeartRate = false;
+                }
+            }
         }
-        else {
+        else
+        {
             heartRate = -1;
         }
     }
@@ -81,20 +104,19 @@ public class DDAScript : MonoBehaviour
             // 0 -> user is satisfied
             // 1 -> user feels like the game is too hard
             // -1 -> user feels that the game is too easy / bored
-            if (emotions.Equals("0"))
+            if (emotions.Equals("-1") )
             {
-                positiveMult = 1;
-                negativeMult = 1;
-            }
-            else if (emotions.Equals("-1"))
-            {
-                positiveMult -= 0.1;
-                negativeMult += 0.1;
+                if (heartRate == -1 || (increaseInHeartRate == true && heartRate != -1)){
+                    positiveMult -= 0.1;
+                    negativeMult += 0.1;
+                }
             }
             else if (emotions.Equals("1") )
             {
-                positiveMult += 0.3;
-                negativeMult -= 0.1;
+                if (heartRate == -1 || (increaseInHeartRate == true && heartRate != -1)){
+                    positiveMult += 0.1;
+                    negativeMult -= 0.1;
+                }
             }
 
             if(positiveMult <= 0)
@@ -107,20 +129,8 @@ public class DDAScript : MonoBehaviour
                 negativeMult = 0.1;
             }
             //Code for values that the smaller the easier the game.
-            Enemy.maxHealth = 100 * negativeMult;
-
-            //Code for values that the bigger the easier the game.
-            PlayerController.playerMaxHealth = 100 * positiveMult;
-            PlayerController.attackDamage1 = 25 * positiveMult;
-            PlayerController.attackDamage2 = 50 * positiveMult;
-            PotionSpawner.spawnTime = 45 * (float)negativeMult;
-
             UnityEngine.Debug.Log("Emotion: " + e.Data);
-
-            UnityEngine.Debug.Log("maxHealth(" + PlayerController.playerMaxHealth + ", " + Enemy.maxHealth+")");
-            UnityEngine.Debug.Log("dmg(" + PlayerController.attackDamage1 + ", " + PlayerController.attackDamage2 + ")");
-            UnityEngine.Debug.Log("PSpawnTime(" + PotionSpawner.spawnTime + ")");
-
+            DynamicBalancer.BalanceGame(positiveMult, negativeMult);
         }
     }
 
